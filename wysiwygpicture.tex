@@ -60,3 +60,107 @@
 \end{Form}
 
 \end{document}
+
+% \DocumentMetadata{}
+% \documentclass{article}
+% \usepackage{hyperref} % For creating form fields and JavaScript
+% \usepackage{etoolbox}
+% \makeatletter
+% \def\picture@coords{}
+% \newsavebox{\pushbutton@picture}
+% \pretocmd{\@PushButton}{\savebox{\pushbutton@picture}{#2}}{}{\errmessage{could not patch \string\@PushButton}}
+% \pretocmd{\@picture}{\xdef\picture@coords{{#1}{#2}{#3}{#4}}}{}{\errmessage{could not patch \string\@picture}}
+% \newcounter{c@interactive@picture}
+% \setcounter{c@interactive@picture}{0}
+% \newcounter{c@interactive@stamp@put}
+% \letcs{\interactive@stamp@put}{put }
+% \pretocmd{\interactive@stamp@put}{%
+
+% }{}{\errmessage{could not patch \string\interactive@stamp@put}\@ehc}
+
+% \pretocmd
+% % width, height, Xoffset, Yoffset, name
+% \newcommand{\PushButtonJSHelper}[5]{
+%     var x = this.mouseX;
+%     var y = this.mouseY;
+%     console.println('Mouse coordinates: (' + x + ', ' + y + ')');
+%     var obj = this.getField('#5');
+%     % console.println(obj);
+%     % for (var key in obj) \string{ if (obj.hasOwnProperty(key)) \string{ console.println(key + ':' + obj[key]); \string} \string}
+%     console.println('#5 coordinates: (' + obj.rect + ')');
+%     var objLowerX = obj.rect[0];
+%     var objLowerY = obj.rect[3];
+%     var objUpperX = obj.rect[2];
+%     var objUpperY = obj.rect[1];
+%     var objht = objUpperY - objLowerY;
+%     var objwd = objUpperX - objLowerX;
+%     var xPercent = (x - objLowerX) / objwd;
+%     var yPercent = (y - objLowerY) / objht;
+%     console.println('Scaling: (#1, #2) (#3, #4)');
+%     var xScaled = xPercent * #1;
+%     var yScaled = yPercent * #2;
+%     var xTranslated = xScaled - #3;
+%     var yTranslated = yScaled - #4;
+%     console.println('Scaled coordinates: (' + xScaled + ', ' + yScaled + ')');
+%     var coordField = this.getField('coordField\arabic{c@interactive@picture}')
+%     coordField.value = '';
+%     coordField.value += '\string\\\string\\begin{picture}\string\\n';
+%     coordField.value += '\string\\\string\\end{picture}\string\\n';
+% %
+%     %  += '\string\\\string\\put(' + xScaled + ', ' + yScaled + ')\string\\n';
+% }
+% \newcommand{\PushButtonForPicture}[2][]{%
+%     \global\stepcounter{c@interactive@picture}%
+%     \setcounter{c@interactive@stamp@put}{0}%
+%     \def\coordField@init@codeData@def{coordField.codeData = []; coordField.codeX = []; coordField.codeY = [];}%
+%     \PushButton[%
+%         name=pushButtonForPicture\arabic{c@interactive@picture},%
+%         onclick={\expandafter\PushButtonJSHelper\picture@coords{pushButtonForPicture\arabic{c@interactive@picture}}},%
+%         #1%
+%     ]{#2}%
+%     \TextField[name=coordField\arabic{c@interactive@picture}, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
+% }
+% \makeatother
+
+% \begin{document}
+% \begin{Form}
+
+% % Define the multiline text field
+% % \TextField[name=coordField, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
+
+% \PushButtonForPicture{%
+% \begin{picture}(200, 200)
+% % Define the button
+%     \put(0, 0){\makebox(200, 200){Click}}
+% \end{picture}
+% }
+
+% \end{Form}
+
+% \end{document}
+
+% % \documentclass[11pt]{report}
+% % \usepackage{bearwear}
+% % \begin{document}
+
+% % a default stamp
+% %  \ExplSyntaxOn
+% %   \pdfannot_box:nnnn {3cm}{1cm}{0cm}
+% %     {/Subtype/Stamp /Name/Approved}
+% %  \ExplSyntaxOff
+
+% % \par
+% % \vspace{1cm}
+% % a custom stamp
+% %   \ExplSyntaxOn
+% %   \pdfxform_new:nnn{mystamp}{}{\tikz[scale=0.3]{\bear\bearwear}~\Large My~stamp}
+% %   \pdfxform_new:nnn{mystampR}{}{\tikz[scale=0.3]{\bear\bearwear[shirt=red]}~\Large My~stamp}
+
+% %   \pdfannot_box:nnne {3cm}{1cm}{0cm}
+% %     {/Subtype/Stamp
+% %      /AP~
+% %       <</N~\pdfxform_ref:n{mystamp}
+% %     %    /R~\pdfxform_ref:n{mystampR}
+% %       >>}
+% %   \ExplSyntaxOff
+% % \end{document}
