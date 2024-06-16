@@ -1,11 +1,82 @@
+\DocumentMetadata{}
 \documentclass{article}
 \usepackage{hyperref} % For creating form fields and JavaScript
 \usepackage{etoolbox}
 \makeatletter
 \def\picture@coords{}
 \newsavebox{\pushbutton@picture}
-\pretocmd{\@PushButton}{\savebox{\pushbutton@picture}{#2}}{}{\errmessage{could not patch \string\@PushButton}}
+\def\@PushButton@hook@pre#1#2{\savebox{\pushbutton@picture}{#2}}
+\pretocmd{\@PushButton}{\@PushButton@hook@pre{#1}{#2}}{}{
+    % \message{\meaning\@PushButton}}%
+    \@latex@warning{Could not patch \string\@PushButton with \string\@PushButton@hook@pre, falling back to naive patching with \detokenize{[#1]#2} args from: \expandafter\detokenize\expandafter{\meaning\@PushButton}}%
+    \let\@PushButton@orig=\@PushButton
+    \def\@PushButton[#1]#2{%
+        \@PushButton@hook@pre{#1}{#2}%
+        \@PushButton@orig[#1]{#2}%
+    }
+    % \errmessage{could not patch \string\@PushButton}
+}
 \pretocmd{\@picture}{\xdef\picture@coords{{#1}{#2}{#3}{#4}}}{}{\errmessage{could not patch \string\@picture}}
+\newcounter{c@interactive@picture}
+\setcounter{c@interactive@picture}{0}
+\newcounter{c@interactive@stamp@put}
+\letcs{\interactive@stamp@put}{put }
+\ExplSyntaxOn
+\newsavebox{\interactive@stamp@put@make@box}
+% <name>[hover]{normal}
+\NewDocumentCommand{\interactive@stamp@put@make}{D<>{interactivestampput\arabic{c@interactive@stamp@put}}om}{%
+    \savebox{\interactive@stamp@put@make@box}{#3}%
+    % \pdfxform_new:nnn{#1}{}{\usebox{\interactive@stamp@put@make@box}}%
+    \edef\interactive@stamp@put@make@name{#1}%
+    \edef\interactive@stamp@put@make@nameR{#1R}%
+    \edef\interactive@stamp@put@make@name{\expandafter\detokenize\expandafter{\interactive@stamp@put@make@name}}%
+    \edef\interactive@stamp@put@make@nameR{\expandafter\detokenize\expandafter{\interactive@stamp@put@make@nameR}}%
+    \expandafter\pdfxform_new:nnn\expandafter{\interactive@stamp@put@make@name}{}{\usebox{\interactive@stamp@put@make@box}}%
+    \def\interactive@stamp@put@make@tmp@R{}
+    \IfNoValueTF{#2}
+        {}
+        {
+            \expandafter\pdfxform_new:nnn\expandafter{\interactive@stamp@put@make@nameR}{}{#2}
+            \edef\interactive@stamp@put@make@tmp@R{
+                /R~\noexpand\pdfxform_ref:n{\interactive@stamp@put@make@nameR}
+            }
+        }
+    \csedef{interactive@stamp@put@#1}{%
+        \noexpand\pdfannot_box:nnne {\the\wd\interactive@stamp@put@make@box}{\the\ht\interactive@stamp@put@make@box}{\the\dp\interactive@stamp@put@make@box}
+            {/Subtype/Stamp
+             /AP~
+              <</N~\noexpand\pdfxform_ref:n{\interactive@stamp@put@make@name}
+                \expandonce\interactive@stamp@put@make@tmp@R
+              >>}
+    }%
+    % \csshow{interactive@stamp@put@#1}
+}
+% <name>
+\NewDocumentCommand{\interactive@stamp@put@put}{D<>{interactivestampput\arabic{c@interactive@stamp@put}}}{%
+    % \csshow{interactive@stamp@put@#1}%
+    \csname interactive@stamp@put@#1\endcsname
+    % \show1
+    % \show\interactive@stamp@put@make@name
+    % \pdfannot_box:nnne {200.0pt}{200.0pt}{0.0pt}{/Subtype/Stamp/AP <</N \expandafter\pdfxform_ref:n\expandafter{\interactive@stamp@put@make@name}>>}
+    % \pdfannot_box:nnne {200.0pt}{200.0pt}{0.0pt}{/Subtype/Stamp/AP <</N \pdfxform_ref:n {#1}>>}
+}
+\ExplSyntaxOff
+\letcs{\@put@space@orig}{put }%
+% we should do more escaping, TODO
+\newcommand{\QuoteStringForJS}[1]{'\detokenize{#1}'}
+\long\def\interactive@stamp@put(#1,#2)#3{%
+    \global\stepcounter{c@interactive@stamp@put}%
+    \xappto{\coordField@init@codeData@def}{%
+        coordField.codeData[\arabic{c@interactive@stamp@put}] = \QuoteStringForJS{#3};
+        coordField.codeX[\arabic{c@interactive@stamp@put}] = #1;
+        coordField.codeY[\arabic{c@interactive@stamp@put}] = #2;
+    }%
+    \show\coordField@init@codeData@def
+    \@put@space@orig({#1},{#2}){\interactive@stamp@put@make{#3}\interactive@stamp@put@put}%
+}
+% }{}{\errmessage{could not patch \string\interactive@stamp@put}\@ehc}
+
+% \pretocmd
 % width, height, Xoffset, Yoffset, name
 \newcommand{\PushButtonJSHelper}[5]{
     var x = this.mouseX;
@@ -29,31 +100,40 @@
     var xTranslated = xScaled - #3;
     var yTranslated = yScaled - #4;
     console.println('Scaled coordinates: (' + xScaled + ', ' + yScaled + ')');
-    this.getField('coordField').value += '\string\\\string\\put(' + xScaled + ', ' + yScaled + ')\string\\n';
+    var coordField = this.getField('coordField\arabic{c@interactive@picture}');
+    % coordField.value = '';
+    % coordField.value += '\string\\\string\\begin{picture}\string\\n';
+    % coordField.value += '\string\\\string\\end{picture}\string\\n';
+    coordField.value += '\string\\\string\\put(' + xScaled + ', ' + yScaled + ')\string\\n';
 }
-\newcounter{PushButtonForPicture}
-\setcounter{PushButtonForPicture}{0}
-\newcommand{\PushButtonForPicture}[2][]{%
-    \global\stepcounter{PushButtonForPicture}%
+% \PushButtonForPicture[\PushButton options][TextFieldOptions][TextFieldLabel]{Picture}
+\NewDocumentCommand{\PushButtonForPicture}{O{}O{width=300pt, height=100pt}O{Mouse Coordinates:}m}{%
+    \global\stepcounter{c@interactive@picture}%
+    \setcounter{c@interactive@stamp@put}{0}%
+    \def\coordField@init@codeData@def{coordField.codeData = []; coordField.codeX = []; coordField.codeY = [];}%
+    \cslet{put }{\interactive@stamp@put}%
     \PushButton[%
-        name=pushButtonForPicture\arabic{PushButtonForPicture},%
-        onclick={\expandafter\PushButtonJSHelper\picture@coords{pushButtonForPicture\arabic{PushButtonForPicture}}},%
+        name=pushButtonForPicture\arabic{c@interactive@picture},%
+        onclick={\expandafter\PushButtonJSHelper\picture@coords{pushButtonForPicture\arabic{c@interactive@picture}}},%
         #1%
-    ]{#2}%
+    ]{#4}%
+    \cslet{put }{\@put@space@orig}%
+    \par
+    \TextField[name=coordField\arabic{c@interactive@picture},multiline=true,#2]{#3}
 }
 \makeatother
 
 \begin{document}
-
 \begin{Form}
 
 % Define the multiline text field
-\TextField[name=coordField, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
+% \TextField[name=coordField, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
 
 \PushButtonForPicture{%
 \begin{picture}(200, 200)
 % Define the button
-    \put(0, 0){\makebox(200, 200){Click}}
+    \put(0, 0){\makebox(100, 100){Click}}
+    \put(10, 10){\makebox(200, 200){Click me too}}
 \end{picture}
 }
 
@@ -61,106 +141,28 @@
 
 \end{document}
 
-% \DocumentMetadata{}
-% \documentclass{article}
-% \usepackage{hyperref} % For creating form fields and JavaScript
-% \usepackage{etoolbox}
-% \makeatletter
-% \def\picture@coords{}
-% \newsavebox{\pushbutton@picture}
-% \pretocmd{\@PushButton}{\savebox{\pushbutton@picture}{#2}}{}{\errmessage{could not patch \string\@PushButton}}
-% \pretocmd{\@picture}{\xdef\picture@coords{{#1}{#2}{#3}{#4}}}{}{\errmessage{could not patch \string\@picture}}
-% \newcounter{c@interactive@picture}
-% \setcounter{c@interactive@picture}{0}
-% \newcounter{c@interactive@stamp@put}
-% \letcs{\interactive@stamp@put}{put }
-% \pretocmd{\interactive@stamp@put}{%
-
-% }{}{\errmessage{could not patch \string\interactive@stamp@put}\@ehc}
-
-% \pretocmd
-% % width, height, Xoffset, Yoffset, name
-% \newcommand{\PushButtonJSHelper}[5]{
-%     var x = this.mouseX;
-%     var y = this.mouseY;
-%     console.println('Mouse coordinates: (' + x + ', ' + y + ')');
-%     var obj = this.getField('#5');
-%     % console.println(obj);
-%     % for (var key in obj) \string{ if (obj.hasOwnProperty(key)) \string{ console.println(key + ':' + obj[key]); \string} \string}
-%     console.println('#5 coordinates: (' + obj.rect + ')');
-%     var objLowerX = obj.rect[0];
-%     var objLowerY = obj.rect[3];
-%     var objUpperX = obj.rect[2];
-%     var objUpperY = obj.rect[1];
-%     var objht = objUpperY - objLowerY;
-%     var objwd = objUpperX - objLowerX;
-%     var xPercent = (x - objLowerX) / objwd;
-%     var yPercent = (y - objLowerY) / objht;
-%     console.println('Scaling: (#1, #2) (#3, #4)');
-%     var xScaled = xPercent * #1;
-%     var yScaled = yPercent * #2;
-%     var xTranslated = xScaled - #3;
-%     var yTranslated = yScaled - #4;
-%     console.println('Scaled coordinates: (' + xScaled + ', ' + yScaled + ')');
-%     var coordField = this.getField('coordField\arabic{c@interactive@picture}')
-%     coordField.value = '';
-%     coordField.value += '\string\\\string\\begin{picture}\string\\n';
-%     coordField.value += '\string\\\string\\end{picture}\string\\n';
-% %
-%     %  += '\string\\\string\\put(' + xScaled + ', ' + yScaled + ')\string\\n';
-% }
-% \newcommand{\PushButtonForPicture}[2][]{%
-%     \global\stepcounter{c@interactive@picture}%
-%     \setcounter{c@interactive@stamp@put}{0}%
-%     \def\coordField@init@codeData@def{coordField.codeData = []; coordField.codeX = []; coordField.codeY = [];}%
-%     \PushButton[%
-%         name=pushButtonForPicture\arabic{c@interactive@picture},%
-%         onclick={\expandafter\PushButtonJSHelper\picture@coords{pushButtonForPicture\arabic{c@interactive@picture}}},%
-%         #1%
-%     ]{#2}%
-%     \TextField[name=coordField\arabic{c@interactive@picture}, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
-% }
-% \makeatother
-
+% \documentclass[11pt]{report}
+% \usepackage{bearwear}
 % \begin{document}
-% \begin{Form}
 
-% % Define the multiline text field
-% % \TextField[name=coordField, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
+% a default stamp
+%  \ExplSyntaxOn
+%   \pdfannot_box:nnnn {3cm}{1cm}{0cm}
+%     {/Subtype/Stamp /Name/Approved}
+%  \ExplSyntaxOff
 
-% \PushButtonForPicture{%
-% \begin{picture}(200, 200)
-% % Define the button
-%     \put(0, 0){\makebox(200, 200){Click}}
-% \end{picture}
-% }
+% \par
+% \vspace{1cm}
+% a custom stamp
+%   \ExplSyntaxOn
+%   \pdfxform_new:nnn{mystamp}{}{\tikz[scale=0.3]{\bear\bearwear}~\Large My~stamp}
+%   \pdfxform_new:nnn{mystampR}{}{\tikz[scale=0.3]{\bear\bearwear[shirt=red]}~\Large My~stamp}
 
-% \end{Form}
-
+%   \pdfannot_box:nnne {3cm}{1cm}{0cm}
+%     {/Subtype/Stamp
+%      /AP~
+%       <</N~\pdfxform_ref:n{mystamp}
+%     %    /R~\pdfxform_ref:n{mystampR}
+%       >>}
+%   \ExplSyntaxOff
 % \end{document}
-
-% % \documentclass[11pt]{report}
-% % \usepackage{bearwear}
-% % \begin{document}
-
-% % a default stamp
-% %  \ExplSyntaxOn
-% %   \pdfannot_box:nnnn {3cm}{1cm}{0cm}
-% %     {/Subtype/Stamp /Name/Approved}
-% %  \ExplSyntaxOff
-
-% % \par
-% % \vspace{1cm}
-% % a custom stamp
-% %   \ExplSyntaxOn
-% %   \pdfxform_new:nnn{mystamp}{}{\tikz[scale=0.3]{\bear\bearwear}~\Large My~stamp}
-% %   \pdfxform_new:nnn{mystampR}{}{\tikz[scale=0.3]{\bear\bearwear[shirt=red]}~\Large My~stamp}
-
-% %   \pdfannot_box:nnne {3cm}{1cm}{0cm}
-% %     {/Subtype/Stamp
-% %      /AP~
-% %       <</N~\pdfxform_ref:n{mystamp}
-% %     %    /R~\pdfxform_ref:n{mystampR}
-% %       >>}
-% %   \ExplSyntaxOff
-% % \end{document}
