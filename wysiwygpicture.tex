@@ -1,0 +1,62 @@
+\documentclass{article}
+\usepackage{hyperref} % For creating form fields and JavaScript
+\usepackage{etoolbox}
+\makeatletter
+\def\picture@coords{}
+\newsavebox{\pushbutton@picture}
+\pretocmd{\@PushButton}{\savebox{\pushbutton@picture}{#2}}{}{\errmessage{could not patch \string\@PushButton}}
+\pretocmd{\@picture}{\xdef\picture@coords{{#1}{#2}{#3}{#4}}}{}{\errmessage{could not patch \string\@picture}}
+% width, height, Xoffset, Yoffset, name
+\newcommand{\PushButtonJSHelper}[5]{
+    var x = this.mouseX;
+    var y = this.mouseY;
+    console.println('Mouse coordinates: (' + x + ', ' + y + ')');
+    var obj = this.getField('#5');
+    % console.println(obj);
+    % for (var key in obj) \string{ if (obj.hasOwnProperty(key)) \string{ console.println(key + ':' + obj[key]); \string} \string}
+    console.println('#5 coordinates: (' + obj.rect + ')');
+    var objLowerX = obj.rect[0];
+    var objLowerY = obj.rect[3];
+    var objUpperX = obj.rect[2];
+    var objUpperY = obj.rect[1];
+    var objht = objUpperY - objLowerY;
+    var objwd = objUpperX - objLowerX;
+    var xPercent = (x - objLowerX) / objwd;
+    var yPercent = (y - objLowerY) / objht;
+    console.println('Scaling: (#1, #2) (#3, #4)');
+    var xScaled = xPercent * #1;
+    var yScaled = yPercent * #2;
+    var xTranslated = xScaled - #3;
+    var yTranslated = yScaled - #4;
+    console.println('Scaled coordinates: (' + xScaled + ', ' + yScaled + ')');
+    this.getField('coordField').value += '\string\\\string\\put(' + xScaled + ', ' + yScaled + ')\string\\n';
+}
+\newcounter{PushButtonForPicture}
+\setcounter{PushButtonForPicture}{0}
+\newcommand{\PushButtonForPicture}[2][]{%
+    \global\stepcounter{PushButtonForPicture}%
+    \PushButton[%
+        name=pushButtonForPicture\arabic{PushButtonForPicture},%
+        onclick={\expandafter\PushButtonJSHelper\picture@coords{pushButtonForPicture\arabic{PushButtonForPicture}}},%
+        #1%
+    ]{#2}%
+}
+\makeatother
+
+\begin{document}
+
+\begin{Form}
+
+% Define the multiline text field
+\TextField[name=coordField, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
+
+\PushButtonForPicture{%
+\begin{picture}(200, 200)
+% Define the button
+    \put(0, 0){\makebox(200, 200){Click}}
+\end{picture}
+}
+
+\end{Form}
+
+\end{document}
