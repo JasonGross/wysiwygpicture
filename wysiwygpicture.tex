@@ -4,6 +4,7 @@
 \usepackage{etoolbox}
 \usepackage{graphicx}
 \usepackage{color}
+\usepackage{zref-abspage}
 % \usepackage{insdljs}
 
 % \ExplSyntaxOn
@@ -48,6 +49,7 @@
 
 \makeatletter
 \def\picture@coords{}
+\def\picture@coords@string{}
 \newsavebox{\pushbutton@picture}
 \def\@PushButton@hook@pre#1#2{\savebox{\pushbutton@picture}{#2}}
 \pretocmd{\@PushButton}{\@PushButton@hook@pre{#1}{#2}}{}{
@@ -60,7 +62,16 @@
     }
     % \errmessage{could not patch \string\@PushButton}
 }
-\pretocmd{\@picture}{\xdef\picture@coords{{#1}{#2}{#3}{#4}}}{}{\errmessage{could not patch \string\@picture}}
+\pretocmd{\@picture}{%
+    \xdef\picture@coords{{#1}{#2}{#3}{#4}}%
+    \def\picture@coords@tempa{(#3,#4)}%
+    \def\picture@coords@tempb{(0,0)}%
+    \ifx\picture@coords@tempa\picture@coords@tempb
+        \xdef\picture@coords@string{(#1,#2)}%
+    \else
+        \xdef\picture@coords@string{(#1,#2)(#3,#4)}%
+    \fi
+}{}{\errmessage{could not patch \string\@picture}}
 \newcounter{c@interactive@picture}
 \setcounter{c@interactive@picture}{0}
 \newcounter{c@interactive@stamp@put}
@@ -138,13 +149,81 @@
 \ExplSyntaxOff
 \letcs{\@put@space@orig}{put }%
 % we should do more escaping, TODO
-\newcommand{\QuoteStringForJS}[1]{'\detokenize{#1}'}
+\edef\@slashstr{\expandafter\expandafter\expandafter\detokenize\expandafter\expandafter\expandafter{\expandafter\@gobble\string\\}}
+\def\wysiwygpicture@swap#1#2{#2#1}
+% \edef\make@doubleslash{%
+%     \noexpand\def\noexpand\@doubleslash##1{\noexpand\@doubleslash##1\@slashstr{}}%
+%     \noexpand\def\noexpand\@doubleslash@##1\@slashstr##2##{%
+%         \noexpand\def\noexpand\@tempa{##2}%
+%         \noexpand\def\noexpand\@empty{}%
+%         \noexpand\ifx\noexpand\@tempa\noexpand\@slashstr
+%             % done, but double the slash
+%             \noexpand\expandafter\noexpand\@firstoftwo
+%         \noexpand\else
+%             \noexpand\expandafter\noexpand\@secondoftwo
+%         \noexpand\fi
+%         {##1\noexpand\@slashstr\noexpand\@slashstr}%
+%         {%
+%             \noexpand\ifx\noexpand\@tempa\noexpand\@empty
+%                 % done, slash str is fake
+%                 \noexpand\expandafter\noexpand\@firstoftwo
+%             \noexpand\else
+%                 % more characters
+%                 \noexpand\expandafter\noexpand\@secondoftwo
+%             \noexpand\fi
+%             {##1}%
+%             {%
+%                 ##1\noexpand\@doubleslash##2%
+%             }%
+%         }%
+%     }%
+% }
+% \show\make@doubleslash
+% \make@doubleslash
+% \show\@doubleslash
+% \show\@doubleslash@
+% \edef\foo{\expandafter\@doubleslash\expandafter{\detokenize{\foo}}}
+% \show\foo
+% Define \doubleslashes{\cmd}{#2} as a command that iterates through all the tokens in #2, and replaces all tokens that compare equal to the contents of \@slashstr with \@slashstr\@slashstr, and stores the result in #2
+\def\doubleslashes#1#2{\def#1{}\@doubleslashes#1#2\END@DOUBLE@SLASHES}
+% TODO: fix spaces
+\def\@doubleslashes#1#2#3\END@DOUBLE@SLASHES{%
+    \ifx\relax#2\relax% done/empty
+        \expandafter\@firstoftwo
+    \else
+        \expandafter\@secondoftwo
+    \fi
+    {}%
+    {%
+        \expandafter\ifx\@slashstr#2
+            \expandafter\@firstoftwo
+        \else
+            \expandafter\@secondoftwo
+        \fi
+        {\edef#1{#1\@slashstr\@slashstr\@slashstr\@slashstr}}%
+        {\edef#1{#1#2}}%
+        % \show#1%
+        % \message{remaining: `#3`}%
+        \ifx\relax#3\relax% done
+            \expandafter\@firstoftwo
+        \else
+            \expandafter\@secondoftwo
+        \fi
+        {}%
+        {\@doubleslashes#1#3\END@DOUBLE@SLASHES}%
+    }%
+}
+% \show\doubleslashes
+\newcommand{\QuoteStringForJS}[1]{'\expandafter\doubleslashes\expandafter{\detokenize{#1}}'}
+\newcommand{\QuoteStringForJSTo}[2]{\expandafter\doubleslashes\expandafter#1\expandafter{\detokenize{'#2'}}}
 \long\def\interactive@stamp@put(#1,#2)#3{%
     \global\stepcounter{c@interactive@stamp@put}%
+    \QuoteStringForJSTo{\interactive@stamp@put@js}{#3}%
+    % \show\interactive@stamp@put@js
     \xappto{\coordField@init@codeData@def}{%
-        coordField.codeData[\arabic{c@interactive@stamp@put}] = \QuoteStringForJS{#3};
-        coordField.codeX[\arabic{c@interactive@stamp@put}] = #1;
-        coordField.codeY[\arabic{c@interactive@stamp@put}] = #2;
+        coordFieldFull.codeData[\arabic{c@interactive@stamp@put}-1] = \interactive@stamp@put@js;
+        coordFieldFull.codeX[\arabic{c@interactive@stamp@put}-1] = #1;
+        coordFieldFull.codeY[\arabic{c@interactive@stamp@put}-1] = #2;
     }%
     % \show\coordField@init@codeData@def
     \@put@space@orig({#1},{#2}){\interactive@stamp@put@make{#3}\interactive@stamp@put@put}%
@@ -180,33 +259,69 @@
     % coordField.value += '\string\\\string\\begin{picture}\string\\n';
     % coordField.value += '\string\\\string\\end{picture}\string\\n';
     coordField.value += '\string\\\string\\put(' + xScaled + ', ' + yScaled + ')\string\\n';
+    % coordField.value += 'page: \zref@extractdefault{abspage}{\the\value{page}}{0}\\n';
+    var annots = this.getAnnots({
+        nPage: \zref@extractdefault{abspage}{\the\value{page}}{0}
+    });
+    % var coordFieldFull = this.getField('coordField\arabic{c@interactive@picture}Full');
+    \coordField@init@codeData@def
+    if (annots != null) {
+        coordFieldFull.value = '\string\\\string\\begin{picture}\picture@coords@string\string\\n';
+        for (var i = 0; i < annots.length; i++) {
+            var annot = annots[i];
+            console.println(i + ' coordinates: (' + annot.rect + ')');
+            var objLowerX = annot.rect[0];
+            var objLowerY = annot.rect[3];
+            var objUpperX = annot.rect[2];
+            var objUpperY = annot.rect[1];
+            var objht = objUpperY - objLowerY;
+            var objwd = objUpperX - objLowerX;
+            var xPercent = (x - objLowerX) / objwd;
+            var yPercent = (y - objLowerY) / objht;
+            console.println(i + 'Scaling: (#1, #2) (#3, #4)');
+            var xScaled = xPercent * #1;
+            var yScaled = yPercent * #2;
+            var xTranslated = xScaled - #3;
+            var yTranslated = yScaled - #4;
+            console.println(i + 'Scaled coordinates: (' + xScaled + ', ' + yScaled + ')');
+            coordFieldFull.value += '\string\\\string\\put(' + xScaled + ',' + yScaled + '){' + coordFieldFull.codeData[i] + '}\string\\n';
+        }
+        coordFieldFull.value += '\string\\\string\\end{picture}\string\\n';
+    }
+    % coordField.value += annots;
 }
 \newsavebox{\pushButtonForPicture@temp@box}%
 % \PushButtonForPicture[\PushButton options][TextFieldOptions][TextFieldLabel]{Picture}
 \NewDocumentCommand{\PushButtonForPicture}{O{}O{width=300pt, height=100pt}O{Mouse Coordinates:}O{Full Code:}m}{%
     \global\stepcounter{c@interactive@picture}%
     \setcounter{c@interactive@stamp@put}{0}%
-    \def\coordField@init@codeData@def{coordField.codeData = []; coordField.codeX = []; coordField.codeY = [];}%
+    \edef\coordField@init@codeData@def{%
+        var coordFieldFull = this.getField('coordField\arabic{c@interactive@picture}Full');
+        coordFieldFull.codeData = [];
+        coordFieldFull.codeX = [];
+        coordFieldFull.codeY = [];
+    }%
     \cslet{put }{\interactive@stamp@put}%
     \savebox{\pushButtonForPicture@temp@box}{#5}%
-    \edef\pushbutton@js@text{%
-        function pageLoaded\arabic{c@interactive@picture}(){
-            var coordField = this.getField('coordField\arabic{c@interactive@picture}Full');
-            coordField.codeData = [];
-            coordField.codeX = [];
-            coordField.codeY = [];
-            \coordField@init@codeData@def
-        }
-        this.setPageOpenAction(pageLoaded);
-    }%
-    \edef\pushbutton@js@cmd{%
-\noexpand\begin{insDLJS}[pageLoaded\arabic{c@interactive@picture}]{wysiwygp}{wysiwygpicture JavaScript init code}
-    \pushbutton@js@text
-\noexpand\end{insDLJS}
-}%
-    \show\pushbutton@js@cmd
-    % \interactive@stamp@picture@add@js{\pushbutton@js@text}%
-    % \pushbutton@js@cmd
+%     \edef\pushbutton@js@text{%
+%         function pageLoaded\arabic{c@interactive@picture}(){
+%             % var coordFieldFull = this.getField('coordField\arabic{c@interactive@picture}Full');
+%             % coordFieldFull.codeData = [];
+%             % coordFieldFull.codeX = [];
+%             % coordFieldFull.codeY = [];
+%             \coordField@init@codeData@def
+%         }
+%         this.setPageOpenAction(pageLoaded);
+%     }%
+%     \edef\pushbutton@js@cmd{%
+% \noexpand\begin{insDLJS}[pageLoaded\arabic{c@interactive@picture}]{wysiwygp}{wysiwygpicture JavaScript init code}
+%     \pushbutton@js@text
+% \noexpand\end{insDLJS}
+% }%
+%     \show\pushbutton@js@cmd
+%     % \interactive@stamp@picture@add@js{\pushbutton@js@text}%
+%     % \pushbutton@js@cmd
+    \show\coordField@init@codeData@def
     \PushButton[%
         name=pushButtonForPicture\arabic{c@interactive@picture},%
         onclick={\expandafter\PushButtonJSHelper\picture@coords{pushButtonForPicture\arabic{c@interactive@picture}}},%
@@ -216,7 +331,7 @@
     \cslet{put }{\@put@space@orig}%
     \par
     \TextField[name=coordField\arabic{c@interactive@picture},multiline=true,#2]{#3}\par
-    \show\coordField@init@codeData@def
+    % \show\coordField@init@codeData@def
     \TextField[name=coordField\arabic{c@interactive@picture}Full,multiline=true,#2]{#4}\par
 }
 \makeatother
@@ -224,6 +339,7 @@
 
 
 \begin{document}
+
 \begin{Form}
 
     % Define the multiline text field
