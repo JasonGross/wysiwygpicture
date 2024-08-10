@@ -2,6 +2,50 @@
 \documentclass{article}
 \usepackage{hyperref} % For creating form fields and JavaScript
 \usepackage{etoolbox}
+\usepackage{graphicx}
+\usepackage{color}
+% \usepackage{insdljs}
+
+% \ExplSyntaxOn
+
+% \cs_new_protected:Npn \pdf_add_js:n #1
+%   {
+%     \pdfextension~obj~
+%       {
+%         <<
+%           /S/JavaScript
+%           /JS~(#1)
+%         >>
+%       }
+%   }
+
+% \cs_new_protected:Npn \pdf_add_names:nn #1#2
+%   {
+%     \pdfextension~names~
+%       {
+%         #1~\pdf_object_ref:n{#2}
+%       }
+%   }
+
+% \cs_new_protected:Npn \add_js_to_pdf:n #1
+%   {
+%     \int_set:Nn \l_tmpa_int { \pdf_add_js:n {#1} }
+%     \pdf_add_names:nn { JavaScript } { \int_use:N \l_tmpa_int }
+%   }
+
+% \makeatletter
+% \newcommand{\interactive@stamp@picture@add@js}[2]{%
+% \begin{insDLJS}[]{jsname}{JavaScript code}
+%     function pageLoaded() {
+%         app.alert("The page has loaded!");
+%     }
+%     this.setPageOpenAction(pageLoaded);
+% \end{insDLJS}
+% \add_js_to_pdf:n{#1}
+% %}
+% \makeatother
+% \ExplSyntaxOff
+
 \makeatletter
 \def\picture@coords{}
 \newsavebox{\pushbutton@picture}
@@ -20,13 +64,44 @@
 \newcounter{c@interactive@picture}
 \setcounter{c@interactive@picture}{0}
 \newcounter{c@interactive@stamp@put}
+\newcommand{\makebox@relax@}[1][]{}
+\def\makebox@relax(#1,#2){\makebox@relax@}
 \letcs{\interactive@stamp@put}{put }
 \ExplSyntaxOn
-\newsavebox{\interactive@stamp@put@make@box}
+\newsavebox{\interactive@stamp@put@make@box}%
+\newsavebox{\interactive@stamp@put@make@box@temp}%
 % <name>[hover]{normal}
 \NewDocumentCommand{\interactive@stamp@put@make}{D<>{interactivestampput\arabic{c@interactive@stamp@put}}om}{%
     \savebox{\interactive@stamp@put@make@box}{#3}%
     % \pdfxform_new:nnn{#1}{}{\usebox{\interactive@stamp@put@make@box}}%
+    \dim_compare:nNnTF { \box_wd:N \interactive@stamp@put@make@box } = { 0pt }
+    {
+      \PackageWarning{wysiwygpicture}
+        {
+          The~command~\detokenize { \put{#3} }~has~width~0.~~
+          Stamps~cannot~overflow~their~boundary.~~
+          Trying~again~with~\token_to_str:N \smash\space~set~to~\token_to_str:N \relax,~
+          which~will~give~an~inaccurate~approximation.
+        }
+        \savebox{\interactive@stamp@put@make@box@temp}{\let\smash\relax\let\makebox\makebox@relax#3}%
+        \savebox{\interactive@stamp@put@make@box}{\let\smash\relax\let\makebox\makebox@relax#3}%
+        \dim_set:Nn \l_tmpa_dim { \box_wd:N \interactive@stamp@put@make@box@temp }
+        \edef\interactive@stamp@put@make@wd{\dim_use:N \l_tmpa_dim}%
+        \dim_set:Nn \l_tmpa_dim { \box_ht:N \interactive@stamp@put@make@box@temp }
+        \edef\interactive@stamp@put@make@ht{\dim_use:N \l_tmpa_dim}%
+        \dim_set:Nn \l_tmpa_dim { \box_dp:N \interactive@stamp@put@make@box@temp }
+        \edef\interactive@stamp@put@make@dp{\dim_use:N \l_tmpa_dim}%
+        % \show\interactive@stamp@put@make@wd
+        % \show\interactive@stamp@put@make@ht
+    }
+    {
+        \dim_set:Nn \l_tmpa_dim { \box_wd:N \interactive@stamp@put@make@box }
+        \edef\interactive@stamp@put@make@wd{\dim_use:N \l_tmpa_dim}%
+        \dim_set:Nn \l_tmpa_dim { \box_ht:N \interactive@stamp@put@make@box }
+        \edef\interactive@stamp@put@make@ht{\dim_use:N \l_tmpa_dim}%
+        \dim_set:Nn \l_tmpa_dim { \box_dp:N \interactive@stamp@put@make@box }
+        \edef\interactive@stamp@put@make@dp{\dim_use:N \l_tmpa_dim}%
+    }
     \edef\interactive@stamp@put@make@name{#1}%
     \edef\interactive@stamp@put@make@nameR{#1R}%
     \edef\interactive@stamp@put@make@name{\expandafter\detokenize\expandafter{\interactive@stamp@put@make@name}}%
@@ -42,7 +117,7 @@
             }
         }
     \csedef{interactive@stamp@put@#1}{%
-        \noexpand\pdfannot_box:nnne {\the\wd\interactive@stamp@put@make@box}{\the\ht\interactive@stamp@put@make@box}{\the\dp\interactive@stamp@put@make@box}
+        \noexpand\pdfannot_box:nnne {\interactive@stamp@put@make@wd}{\interactive@stamp@put@make@ht}{\interactive@stamp@put@make@dp}
             {/Subtype/Stamp
              /AP~
               <</N~\noexpand\pdfxform_ref:n{\interactive@stamp@put@make@name}
@@ -71,7 +146,7 @@
         coordField.codeX[\arabic{c@interactive@stamp@put}] = #1;
         coordField.codeY[\arabic{c@interactive@stamp@put}] = #2;
     }%
-    \show\coordField@init@codeData@def
+    % \show\coordField@init@codeData@def
     \@put@space@orig({#1},{#2}){\interactive@stamp@put@make{#3}\interactive@stamp@put@put}%
 }
 % }{}{\errmessage{could not patch \string\interactive@stamp@put}\@ehc}
@@ -106,37 +181,117 @@
     % coordField.value += '\string\\\string\\end{picture}\string\\n';
     coordField.value += '\string\\\string\\put(' + xScaled + ', ' + yScaled + ')\string\\n';
 }
+\newsavebox{\pushButtonForPicture@temp@box}%
 % \PushButtonForPicture[\PushButton options][TextFieldOptions][TextFieldLabel]{Picture}
-\NewDocumentCommand{\PushButtonForPicture}{O{}O{width=300pt, height=100pt}O{Mouse Coordinates:}m}{%
+\NewDocumentCommand{\PushButtonForPicture}{O{}O{width=300pt, height=100pt}O{Mouse Coordinates:}O{Full Code:}m}{%
     \global\stepcounter{c@interactive@picture}%
     \setcounter{c@interactive@stamp@put}{0}%
     \def\coordField@init@codeData@def{coordField.codeData = []; coordField.codeX = []; coordField.codeY = [];}%
     \cslet{put }{\interactive@stamp@put}%
+    \savebox{\pushButtonForPicture@temp@box}{#5}%
+    \edef\pushbutton@js@text{%
+        function pageLoaded\arabic{c@interactive@picture}(){
+            var coordField = this.getField('coordField\arabic{c@interactive@picture}Full');
+            coordField.codeData = [];
+            coordField.codeX = [];
+            coordField.codeY = [];
+            \coordField@init@codeData@def
+        }
+        this.setPageOpenAction(pageLoaded);
+    }%
+    \edef\pushbutton@js@cmd{%
+\noexpand\begin{insDLJS}[pageLoaded\arabic{c@interactive@picture}]{wysiwygp}{wysiwygpicture JavaScript init code}
+    \pushbutton@js@text
+\noexpand\end{insDLJS}
+}%
+    \show\pushbutton@js@cmd
+    % \interactive@stamp@picture@add@js{\pushbutton@js@text}%
+    % \pushbutton@js@cmd
     \PushButton[%
         name=pushButtonForPicture\arabic{c@interactive@picture},%
         onclick={\expandafter\PushButtonJSHelper\picture@coords{pushButtonForPicture\arabic{c@interactive@picture}}},%
         #1%
-    ]{#4}%
+    ]{#5}%
+    % #5
     \cslet{put }{\@put@space@orig}%
     \par
-    \TextField[name=coordField\arabic{c@interactive@picture},multiline=true,#2]{#3}
+    \TextField[name=coordField\arabic{c@interactive@picture},multiline=true,#2]{#3}\par
+    \show\coordField@init@codeData@def
+    \TextField[name=coordField\arabic{c@interactive@picture}Full,multiline=true,#2]{#4}\par
 }
 \makeatother
+
+
 
 \begin{document}
 \begin{Form}
 
-% Define the multiline text field
-% \TextField[name=coordField, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
+    % Define the multiline text field
+    % \TextField[name=coordField, width=300pt, height=100pt, multiline=true]{Mouse Coordinates:}
 
-\PushButtonForPicture{%
-\begin{picture}(200, 200)
-% Define the button
-    \put(0, 0){\makebox(100, 100){Click}}
-    \put(10, 10){\makebox(200, 200){Click me too}}
-\end{picture}
-}
-
+    %        %% Creator: Inkscape 1.3.2 (091e20e, 2023-11-25), www.inkscape.org
+    %% PDF/EPS/PS + LaTeX output extension by Johan Engelen, 2010
+    %% Accompanies image file 'infinite-width.pdf' (pdf, eps, ps)
+    %%
+    %% To include the image in your LaTeX document, write
+    %%   \input{<filename>.pdf_tex}
+    %%  instead of
+    %%   \includegraphics{<filename>.pdf}
+    %% To scale the image, write
+    %%   \def\svgwidth{<desired width>}
+    %%   \input{<filename>.pdf_tex}
+    %%  instead of
+    %%   \includegraphics[width=<desired width>]{<filename>.pdf}
+    %%
+    %% Images with a different path to the parent latex file can
+    %% be accessed with the `import' package (which may need to be
+    %% installed) using
+    %%   \usepackage{import}
+    %% in the preamble, and then including the image with
+    %%   \import{<path to file>}{<filename>.pdf_tex}
+    %% Alternatively, one can specify
+    %%   \graphicspath{{<path to file>/}}
+    %%
+    %% For more information, please see info/svg-inkscape on CTAN:
+    %%   http://tug.ctan.org/tex-archive/info/svg-inkscape
+    %%
+    \begingroup%
+    \makeatletter%
+    \providecommand\color[2][]{%
+        \errmessage{(Inkscape) Color is used for the text in Inkscape, but the package 'color.sty' is not loaded}%
+        \renewcommand\color[2][]{}%
+    }%
+    \providecommand\transparent[1]{%
+        \errmessage{(Inkscape) Transparency is used (non-zero) for the text in Inkscape, but the package 'transparent.sty' is not loaded}%
+        \renewcommand\transparent[1]{}%
+    }%
+    \providecommand\rotatebox[2]{#2}%
+    \newcommand*\fsize{\dimexpr\f@size pt\relax}%
+    \newcommand*\lineheight[1]{\fontsize{\fsize}{#1\fsize}\selectfont}%
+    \ifx\svgwidth\undefined%
+        \setlength{\unitlength}{240pt}%
+        \ifx\svgscale\undefined%
+            \relax%
+        \else%
+            \setlength{\unitlength}{\unitlength * \real{\svgscale}}%
+        \fi%
+    \else%
+        \setlength{\unitlength}{\svgwidth}%
+    \fi%
+    \global\let\svgwidth\undefined%
+    \global\let\svgscale\undefined%
+    \makeatother%
+    \PushButtonForPicture{
+        \begin{picture}(1,0.36033101)%
+            \lineheight{1}%
+            \setlength\tabcolsep{0pt}%
+            % \put(0,0){\includegraphics[width=\unitlength,page=1]{infinite-width.pdf}}%
+            % \put(0,0){\includegraphics[width=\unitlength,page=2]{infinite-width.pdf}}%
+            \put(0.44608842,0.33483555){\color[rgb]{0,0,0}\makebox(0,0)[lt]{\lineheight{1.25}\smash{\begin{tabular}[t]{c}$\displaystyle\int g(t, i)h(z, i)\,\mathrm{d}i$\end{tabular}}}}%
+            \put(-0.00648322,0.33748604){\color[rgb]{0,0,0}\makebox(0,0)[lt]{\lineheight{1.25}\smash{\begin{tabular}[t]{c}$\displaystyle\sum_i g(t, i)h(z, i)w_i$\end{tabular}}}}%
+        \end{picture}%
+    }
+    \endgroup%
 \end{Form}
 
 \end{document}
